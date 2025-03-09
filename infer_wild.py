@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument('--clip_len', type=int, default=243, help='clip length for network input')
     parser.add_argument('--no_trans', action='store_true', help='skip format transformation, use H36M format directly')
     parser.add_argument('--save_format', type=str, default='npy', choices=['npy', 'csv', 'json', 'all'], help='format to save 3D pose results')
+    parser.add_argument('--no_render', action='store_true', help='skip 3D rendering and video generation, only save prediction results')
     opts = parser.parse_args()
     return opts
 
@@ -95,7 +96,8 @@ if __name__ == '__main__':
 
     results_all = np.hstack(results_all)
     results_all = np.concatenate(results_all)
-    render_and_save(results_all, '%s/X3D.mp4' % (opts.out_path), keep_imgs=False, fps=fps_in)
+    if not opts.no_render:
+        render_and_save(results_all, '%s/X3D.mp4' % (opts.out_path), keep_imgs=False, fps=fps_in)
     if opts.pixel:
         # Convert to pixel coordinates
         results_all = results_all * (min(vid_size) / 2.0)
