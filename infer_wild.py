@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument('--focus', type=int, default=None, help='target person id')
     parser.add_argument('--clip_len', type=int, default=243, help='clip length for network input')
     parser.add_argument('--no_trans', action='store_true', help='skip format transformation, use H36M format directly')
+    parser.add_argument('--save_format', type=str, default='npy', choices=['npy', 'csv', 'json', 'all'], help='format to save 3D pose results')
     opts = parser.parse_args()
     return opts
 
@@ -99,4 +100,17 @@ if __name__ == '__main__':
         # Convert to pixel coordinates
         results_all = results_all * (min(vid_size) / 2.0)
         results_all[:,:,:2] = results_all[:,:,:2] + np.array(vid_size) / 2.0
-    np.save('%s/X3D.npy' % (opts.out_path), results_all)
+    if opts.save_format == 'npy':
+        np.save('%s/X3D.npy' % (opts.out_path), results_all)
+    elif opts.save_format == 'csv':
+        np.savetxt('%s/X3D.csv' % (opts.out_path), results_all.reshape(-1, 3), delimiter=',')
+    elif opts.save_format == 'json':
+        import json
+        with open('%s/X3D.json' % (opts.out_path), 'w') as f:
+            json.dump(results_all.tolist(), f)
+    elif opts.save_format == 'all':
+        np.save('%s/X3D.npy' % (opts.out_path), results_all)
+        np.savetxt('%s/X3D.csv' % (opts.out_path), results_all.reshape(-1, 3), delimiter=',')
+        import json
+        with open('%s/X3D.json' % (opts.out_path), 'w') as f:
+            json.dump(results_all.tolist(), f)

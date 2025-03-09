@@ -141,3 +141,5 @@ dmypy.json
 
 *.mp4
 *.npy
+*.json
+*.csv
