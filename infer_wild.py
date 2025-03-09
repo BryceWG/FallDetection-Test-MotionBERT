@@ -22,9 +22,9 @@ def parse_args():
     parser.add_argument('--pixel', action='store_true', help='align with pixle coordinates')
     parser.add_argument('--focus', type=int, default=None, help='target person id')
     parser.add_argument('--clip_len', type=int, default=243, help='clip length for network input')
-    parser.add_argument('--no_trans', action='store_true', help='skip format transformation, use H36M format directly')
+    parser.add_argument('--skip_trans', action='store_true', help='skip format transformation, use H36M format directly')
     parser.add_argument('--save_format', type=str, default='npy', choices=['npy', 'csv', 'json', 'all'], help='format to save 3D pose results')
-    parser.add_argument('--no_render', action='store_true', help='skip 3D rendering and video generation, only save prediction results')
+    parser.add_argument('--skip_render', action='store_true', help='skip 3D rendering and video generation, only save prediction results')
     opts = parser.parse_args()
     return opts
 
@@ -62,10 +62,10 @@ if __name__ == '__main__':
 
     if opts.pixel:
         # Keep relative scale with pixel coornidates
-        wild_dataset = WildDetDataset(opts.json_path, clip_len=opts.clip_len, vid_size=vid_size, scale_range=None, focus=opts.focus, no_trans=opts.no_trans)
+        wild_dataset = WildDetDataset(opts.json_path, clip_len=opts.clip_len, vid_size=vid_size, scale_range=None, focus=opts.focus, skip_trans=opts.skip_trans)
     else:
         # Scale to [-1,1]
-        wild_dataset = WildDetDataset(opts.json_path, clip_len=opts.clip_len, scale_range=[1,1], focus=opts.focus, no_trans=opts.no_trans)
+        wild_dataset = WildDetDataset(opts.json_path, clip_len=opts.clip_len, scale_range=[1,1], focus=opts.focus, skip_trans=opts.skip_trans)
 
     test_loader = DataLoader(wild_dataset, **testloader_params)
 
@@ -96,7 +96,7 @@ if __name__ == '__main__':
 
     results_all = np.hstack(results_all)
     results_all = np.concatenate(results_all)
-    if not opts.no_render:
+    if not opts.skip_render:
         render_and_save(results_all, '%s/X3D.mp4' % (opts.out_path), keep_imgs=False, fps=fps_in)
     if opts.pixel:
         # Convert to pixel coordinates
