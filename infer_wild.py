@@ -184,6 +184,10 @@ if __name__ == '__main__':
         # 查找所有包含2D姿态数据的文件夹
         input_folders = glob.glob(os.path.join(opts.input_dir, "*"))
         
+        # 如果指定了输出路径，确保它存在
+        if opts.out_path:
+            os.makedirs(opts.out_path, exist_ok=True)
+        
         for folder in tqdm(input_folders, desc="处理文件夹"):
             # 构建输入和输出路径
             folder_name = os.path.basename(folder)
@@ -216,8 +220,14 @@ if __name__ == '__main__':
                 print(f"警告: 未找到与 {folder_name} 对应的视频文件，跳过")
                 continue
             
-            # 创建输出目录
-            out_path = os.path.join(folder)
+            # 创建输出目录 - 根据是否指定了全局输出路径决定
+            if opts.out_path:
+                # 使用指定的输出路径，并保持相同的子目录结构
+                out_path = os.path.join(opts.out_path, folder_name)
+            else:
+                # 使用输入文件夹作为输出路径
+                out_path = os.path.join(folder)
+                
             os.makedirs(out_path, exist_ok=True)
             
             # 处理单个文件

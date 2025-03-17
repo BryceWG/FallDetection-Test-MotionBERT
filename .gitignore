@@ -143,3 +143,4 @@ dmypy.json
 *.npy
 *.json
 *.csv
+*.npz
