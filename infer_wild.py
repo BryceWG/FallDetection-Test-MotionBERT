@@ -1,3 +1,4 @@
+# python infer_wild.py --batch_mode --input_dir D:\CodeSpace\FallDetection\FallDetection-Test-HoT\demo\output --videos_dir "F:\fall_detection_data\forward\output_split_3" --save_format npz --skip_trans --skip_render --out_path ./output
 import os
 import numpy as np
 import argparse
@@ -5,6 +6,8 @@ from tqdm import tqdm
 import imageio
 import torch
 import torch.nn as nn
+import glob
+import json
 from torch.utils.data import DataLoader
 from lib.utils.tools import *
 from lib.utils.learning import *
@@ -19,6 +22,9 @@ def parse_args():
     parser.add_argument('-j', '--json_path', type=str, help='2D detection result json path')
     parser.add_argument('-v', '--vid_path', type=str, help='video path')
     parser.add_argument('-o', '--out_path', type=str, help='output path')
+    parser.add_argument('-b', '--batch_mode', action='store_true', help='enable batch processing mode')
+    parser.add_argument('-i', '--input_dir', type=str, help='input directory for batch processing (2D keypoints)')
+    parser.add_argument('-vi', '--videos_dir', type=str, help='directory containing videos for batch processing')
     parser.add_argument('--pixel', action='store_true', help='align with pixle coordinates')
     parser.add_argument('--focus', type=int, default=None, help='target person id')
     parser.add_argument('--clip_len', type=int, default=243, help='clip length for network input')
@@ -29,44 +35,25 @@ def parse_args():
     opts = parser.parse_args()
     return opts
 
-if __name__ == '__main__':
-    import multiprocessing
-    multiprocessing.freeze_support()
-    
-    opts = parse_args()
-    args = get_config(opts.config)
-
-    # 清理GPU内存
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    
-    # 加载模型
-    model_backbone = load_backbone(args)
-    if torch.cuda.is_available():
-        model_backbone = nn.DataParallel(model_backbone)
-        model_backbone = model_backbone.cuda()
-
-    print('Loading checkpoint', opts.evaluate)
-    checkpoint = torch.load(opts.evaluate, map_location=lambda storage, loc: storage)
-    model_backbone.load_state_dict(checkpoint['model_pos'], strict=True)
-    model_pos = model_backbone
-    model_pos.eval()
-    
+def process_single_file(model_pos, json_path, vid_path, out_path, args, opts):
+    """处理单个2D姿态文件并生成3D姿态"""
     # 加载视频元数据
-    vid = imageio.get_reader(opts.vid_path, 'ffmpeg')
+    vid = imageio.get_reader(vid_path, 'ffmpeg')
     fps_in = vid.get_meta_data()['fps']
     vid_size = vid.get_meta_data()['size']
-    os.makedirs(opts.out_path, exist_ok=True)
+    os.makedirs(out_path, exist_ok=True)
 
     # 预处理数据集
-    print('Preparing dataset...')
+    print(f'处理文件: {json_path}')
+    print(f'对应视频: {vid_path}')
+    print('准备数据集...')
     if opts.pixel:
-        keypoints_data = read_input(opts.json_path, vid_size, None, opts.focus, opts.skip_trans)
+        keypoints_data = read_input(json_path, vid_size, None, opts.focus, opts.skip_trans)
     else:
-        keypoints_data = read_input(opts.json_path, vid_size, [1,1], opts.focus, opts.skip_trans)
+        keypoints_data = read_input(json_path, vid_size, [1,1], opts.focus, opts.skip_trans)
 
     # 处理帧
-    print('Processing frames...')
+    print('处理帧...')
     results_all = []
     clip_len = opts.clip_len
     total_frames = keypoints_data.shape[0]
@@ -116,7 +103,7 @@ if __name__ == '__main__':
                 torch.cuda.empty_cache()
 
     # 整合结果
-    print('Finalizing results...')
+    print('整合结果...')
     if len(results_all) > 0:
         results_all = np.concatenate(results_all, axis=1)
         if len(results_all.shape) == 4 and results_all.shape[0] == 1:
@@ -126,7 +113,7 @@ if __name__ == '__main__':
 
     # 保存和渲染
     if not opts.skip_render:
-        render_and_save(results_all, '%s/X3D.mp4' % (opts.out_path), keep_imgs=False, fps=fps_in)
+        render_and_save(results_all, f'{out_path}/X3D.mp4', keep_imgs=False, fps=fps_in)
     
     if opts.pixel:
         results_all = results_all * (min(vid_size) / 2.0)
@@ -134,19 +121,113 @@ if __name__ == '__main__':
     
     # 保存结果
     if opts.save_format == 'npy' or opts.save_format == 'all':
-        np.save('%s/X3D.npy' % (opts.out_path), results_all)
+        np.save(f'{out_path}/X3D.npy', results_all)
     if opts.save_format == 'csv' or opts.save_format == 'all':
-        np.savetxt('%s/X3D.csv' % (opts.out_path), results_all.reshape(-1, 3), delimiter=',')
+        np.savetxt(f'{out_path}/X3D.csv', results_all.reshape(-1, 3), delimiter=',')
     if opts.save_format == 'json' or opts.save_format == 'all':
         import json
-        with open('%s/X3D.json' % (opts.out_path), 'w') as f:
+        with open(f'{out_path}/X3D.json', 'w') as f:
             json.dump(results_all.tolist(), f)
     if opts.save_format == 'npz' or opts.save_format == 'all':
         # 创建output_3D目录
-        os.makedirs(os.path.join(opts.out_path, 'output_3D'), exist_ok=True)
+        os.makedirs(os.path.join(out_path, 'output_3d'), exist_ok=True)
         # 保存为npz格式，使用'reconstruction'作为键，符合train_lstm.py的要求
-        np.savez(os.path.join(opts.out_path, 'output_3D', 'output_keypoints_3d.npz'), 
+        np.savez(os.path.join(out_path, 'output_3d', 'output_keypoints_3d.npz'), 
                  reconstruction=results_all)
-        print(f"已保存NPZ文件到: {os.path.join(opts.out_path, 'output_3D', 'output_keypoints_3d.npz')}")
+        print(f"已保存NPZ文件到: {os.path.join(out_path, 'output_3d', 'output_keypoints_3d.npz')}")
     
-    print('Done!')
+    return results_all
+
+def find_video_by_folder_name(videos_dir, folder_name):
+    """根据文件夹名称查找对应的视频文件"""
+    # 首先尝试精确匹配视频文件名
+    for ext in ['.mp4', '.avi', '.mov', '.mkv']:
+        exact_match = os.path.join(videos_dir, f"{folder_name}{ext}")
+        if os.path.exists(exact_match):
+            return exact_match
+    
+    # 如果没有精确匹配，尝试部分匹配
+    for ext in ['.mp4', '.avi', '.mov', '.mkv']:
+        pattern = os.path.join(videos_dir, f"*{folder_name}*{ext}")
+        matches = glob.glob(pattern)
+        if matches:
+            return matches[0]
+    
+    return None
+
+if __name__ == '__main__':
+    import multiprocessing
+    multiprocessing.freeze_support()
+    
+    opts = parse_args()
+    args = get_config(opts.config)
+
+    # 清理GPU内存
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
+    # 加载模型
+    model_backbone = load_backbone(args)
+    if torch.cuda.is_available():
+        model_backbone = nn.DataParallel(model_backbone)
+        model_backbone = model_backbone.cuda()
+
+    print('加载检查点', opts.evaluate)
+    checkpoint = torch.load(opts.evaluate, map_location=lambda storage, loc: storage)
+    model_backbone.load_state_dict(checkpoint['model_pos'], strict=True)
+    model_pos = model_backbone
+    model_pos.eval()
+    
+    if opts.batch_mode:
+        # 批处理模式
+        print(f"启动批处理模式，从目录 {opts.input_dir} 中读取数据")
+        # 查找所有包含2D姿态数据的文件夹
+        input_folders = glob.glob(os.path.join(opts.input_dir, "*"))
+        
+        for folder in tqdm(input_folders, desc="处理文件夹"):
+            # 构建输入和输出路径
+            folder_name = os.path.basename(folder)
+            json_path = os.path.join(folder, "input_2D", "keypoints_2d.json")
+            
+            # 检查2D姿态文件是否存在
+            if not os.path.exists(json_path):
+                print(f"警告: 在 {folder} 中未找到2D姿态文件，跳过")
+                continue
+            
+            # 查找对应的视频文件
+            vid_path = None
+            
+            # 如果指定了视频目录，则在视频目录中查找与文件夹名称匹配的视频
+            if opts.videos_dir:
+                vid_path = find_video_by_folder_name(opts.videos_dir, folder_name)
+                if not vid_path:
+                    print(f"警告: 在视频目录中未找到与 {folder_name} 匹配的视频文件")
+            
+            # 如果在视频目录中没有找到，则在当前文件夹中查找
+            if not vid_path:
+                vid_files = glob.glob(os.path.join(folder, "*.mp4"))
+                if not vid_files:
+                    vid_files = glob.glob(os.path.join(folder, "*.avi"))
+                
+                if vid_files:
+                    vid_path = vid_files[0]  # 使用第一个找到的视频文件
+            
+            if not vid_path:
+                print(f"警告: 未找到与 {folder_name} 对应的视频文件，跳过")
+                continue
+            
+            # 创建输出目录
+            out_path = os.path.join(folder)
+            os.makedirs(out_path, exist_ok=True)
+            
+            # 处理单个文件
+            try:
+                process_single_file(model_pos, json_path, vid_path, out_path, args, opts)
+                print(f"成功处理: {folder_name}")
+            except Exception as e:
+                print(f"处理 {folder_name} 时出错: {str(e)}")
+    else:
+        # 单文件处理模式
+        process_single_file(model_pos, opts.json_path, opts.vid_path, opts.out_path, args, opts)
+    
+    print('完成!')
