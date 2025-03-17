@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument('--focus', type=int, default=None, help='target person id')
     parser.add_argument('--clip_len', type=int, default=243, help='clip length for network input')
     parser.add_argument('--skip_trans', action='store_true', help='skip format transformation, use H36M format directly')
-    parser.add_argument('--save_format', type=str, default='npy', choices=['npy', 'csv', 'json', 'all'], help='format to save 3D pose results')
+    parser.add_argument('--save_format', type=str, default='npy', choices=['npy', 'csv', 'json', 'npz', 'all'], help='format to save 3D pose results')
     parser.add_argument('--skip_render', action='store_true', help='skip 3D rendering and video generation, only save prediction results')
     parser.add_argument('--batch_size', type=int, default=16, help='batch size for processing multiple clips simultaneously')
     opts = parser.parse_args()
@@ -141,5 +141,12 @@ if __name__ == '__main__':
         import json
         with open('%s/X3D.json' % (opts.out_path), 'w') as f:
             json.dump(results_all.tolist(), f)
+    if opts.save_format == 'npz' or opts.save_format == 'all':
+        # 创建output_3D目录
+        os.makedirs(os.path.join(opts.out_path, 'output_3D'), exist_ok=True)
+        # 保存为npz格式，使用'reconstruction'作为键，符合train_lstm.py的要求
+        np.savez(os.path.join(opts.out_path, 'output_3D', 'output_keypoints_3d.npz'), 
+                 reconstruction=results_all)
+        print(f"已保存NPZ文件到: {os.path.join(opts.out_path, 'output_3D', 'output_keypoints_3d.npz')}")
     
     print('Done!')
