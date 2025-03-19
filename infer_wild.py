@@ -32,8 +32,31 @@ def parse_args():
     parser.add_argument('--save_format', type=str, default='npz', choices=['npy', 'csv', 'json', 'npz', 'all'], help='format to save 3D pose results')
     parser.add_argument('--skip_render', action='store_true', help='skip 3D rendering and video generation, only save prediction results')
     parser.add_argument('--batch_size', type=int, default=16, help='batch size for processing multiple clips simultaneously')
+    parser.add_argument('--normalize_pose', action='store_true', help='normalize 3D poses to remove global translation')
+    parser.add_argument('--root_joint', type=int, default=0, help='root joint index for pose normalization (default: 0 - hip joint)')
     opts = parser.parse_args()
     return opts
+
+def normalize_poses(poses, root_joint_idx=0):
+    """
+    Normalize 3D poses by removing global translation relative to the root joint
+    Args:
+        poses: numpy array of shape (frames, joints, 3)
+        root_joint_idx: index of the root joint (default: 0 - hip joint)
+    Returns:
+        normalized poses with the same shape
+    """
+    # 确保poses是正确的shape
+    if len(poses.shape) == 4:
+        poses = poses[0]  # Remove batch dimension if present
+    
+    # 获取根关节的轨迹
+    root_trajectory = poses[:, root_joint_idx:root_joint_idx+1, :]
+    
+    # 将所有关节的坐标减去根关节的坐标，实现相对位置的归一化
+    normalized_poses = poses - root_trajectory
+    
+    return normalized_poses
 
 def process_single_file(model_pos, json_path, vid_path, out_path, args, opts):
     """处理单个2D姿态文件并生成3D姿态"""
@@ -108,6 +131,11 @@ def process_single_file(model_pos, json_path, vid_path, out_path, args, opts):
         results_all = np.concatenate(results_all, axis=1)
         if len(results_all.shape) == 4 and results_all.shape[0] == 1:
             results_all = results_all[0]
+        
+        # 在渲染和保存之前进行姿态归一化
+        if opts.normalize_pose:
+            print('正在进行姿态归一化...')
+            results_all = normalize_poses(results_all, opts.root_joint)
     else:
         results_all = np.array([])
 
