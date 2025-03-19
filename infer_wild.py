@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument('--focus', type=int, default=None, help='target person id')
     parser.add_argument('--clip_len', type=int, default=243, help='clip length for network input')
     parser.add_argument('--skip_trans', action='store_true', help='skip format transformation, use H36M format directly')
-    parser.add_argument('--save_format', type=str, default='npy', choices=['npy', 'csv', 'json', 'npz', 'all'], help='format to save 3D pose results')
+    parser.add_argument('--save_format', type=str, default='npz', choices=['npy', 'csv', 'json', 'npz', 'all'], help='format to save 3D pose results')
     parser.add_argument('--skip_render', action='store_true', help='skip 3D rendering and video generation, only save prediction results')
     parser.add_argument('--batch_size', type=int, default=16, help='batch size for processing multiple clips simultaneously')
     opts = parser.parse_args()
